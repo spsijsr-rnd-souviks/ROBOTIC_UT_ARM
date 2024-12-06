@@ -1,5 +1,6 @@
 #include <Servo.h>
 #include <ezButton.h>
+#include <math.h>
 
 ezButton button(13); // another pin to GND
 
@@ -9,14 +10,15 @@ ezButton button(13); // another pin to GND
 Servo S1;
 Servo S2;
 Servo S3;
-//Servo S4;
+// Servo S4;
 String ans;
-int x,y;
+int x, y, offst = 45, theta, lo = 40, ip;
 int s1, s2, s3;
 int so1, so2, so3;
 uint16_t start, now, interval;
 
-void setup() {
+void setup()
+{
   Serial.begin(9600);
   S1.attach(3);
   S2.attach(5);
@@ -24,191 +26,406 @@ void setup() {
   button.setDebounceTime(50);
 }
 
-void loop() {
-  Serial.println("Start");
-
-  initial_position();//it will read servo's current position, then positioned it in programmed initial position
-
-  //read the current state of the servo
-  so1=S1.read();
-  so2=S2.read();
-  so3=S3.read();
-
-  //y = 45;//it will decide the mode(0, 45, 90)
-  // for(int i = 0; i<=(y+10); i++)
-  // {
-  //   S3.write(i);
-  // }
-
-  //x= 10;//not less than 10 or experimented value
-  // int s1 = y+x;
-  // int s2 = 2*x;
-  // int s3 = 90+x;
-
-  // S1.write(s1);
-  // S2.write(s2);
-  // S3.write(s3);
-  //retract_to_active_pos();
-
-lab:  
-  Serial.println("Select MODE:1(-45), 2(0), 3(90)");
-  float mode = read_val();
-
-  if(mode==1)
+void loop()
+{
+  Serial.println("Chose operation: 1. roof, 2. corner, 3. wall, 4. floor");
+  // need to code
+  ip = read_val();
+  switch (ip)
   {
-    y=0;
-    S1_positioning(so1); //Read the current position of S1, then position it according to the given mood
+  case 1:
+    // roof
+    Serial.println("roof");
+    theta = -50;
+    roof_operation(theta);
+    break;
+  case 2:
+    // floor
+    theta = 50;
+    floor_operation(theta);
+    break;
+  case 3:
+    // subs of corner
+  slct_corner_mode:
+    Serial.println("1. Upper corner(45), 2. lower corner(-45)");
+    ip = read_val();
+    switch (ip)
+    {
+    case 1:
+      theta = 45; // need to cheack
+      corner_operation(theta);
+      break;
+    case 2:
+      theta = -45; // need to cheack
+      corner_operation(theta);
+      break;
+    case 3:
+      break;
+    default:
+      goto slct_corner_mode;
+    }
+    break;
+  case 4:
+    // subs of wall
+  slct_wall_mode:
+    Serial.println("1. up 1m, 2. straight, 3. down 1m, 4. exit");
+    ip = read_val();
+    switch (ip)
+    {
+    case 1:
+      theta = atan(100 / (lo - 10));
+      wall_operation(theta);
+      break;
+    case 2:
+      theta = 0;
+      wall_operation(theta);
+      break;
+    case 3:
+      theta = atanf(-100 / (lo - 10));
+      wall_operation(theta);
+      break;
+    case 4:
+      break;
+    default:
+      Serial.println("enter valid input");
+      goto slct_wall_mode;
+    }
+    break;
+  }
+  delay(50);
+}
+
+void wall_operation(int angle)
+{
+  // theta = atan(100/(lo-10));
+  y = angle;
+  so1 = S1.read();
+  so2 = S2.read();
+  so3 = S3.read();
+  for (so1, so3; so1 <= 90 + y, so3 <= 90 - y; so1++, so3++)
+  {
+    S1.write(so1);
+    S3.write(so3);
+    delay(50);
   }
 
-  else if (mode==2) 
+  for (x = 5; x <= 90; x++)
   {
-    y=45;
-    S1_positioning(so1);
-  }
-
-  else if (mode==3) 
-  {
-    y=90;
-    S1_positioning(so1);
-  }
-
-  else 
-  {
-    Serial.println("wrong input");
-    goto lab;
-  }
-
-  // String ans = read_str();
-  // delay(10);
-
-  //Action mode: from the current position, arm will extend untill full length or button(control feed back) is pressed continously for 3 sec
-  for (x = 10; x<=90; x++)
-  {
-    s1 = y+x;
-    s2 = 2*x;
-    s3 = 90+x;
+    s1 = 90 + y + x;
+    s2 = 2 * x;
+    s3 = 90 - y + x;
 
     S1.write(s1);
     S2.write(s2);
     S3.write(s3);
     delay(50);
 
-    if(x==90)
+    if (x == 90)
     {
       Serial.println("Max length, no surface, retract");
       ans = read_str();
-      goto out;
+      goto out_wall;
     }
 
     button.loop();
-    //if(button.isPressed())
-    if(button.getState()==0)
+    // if(button.isPressed())
+    if (button.getState() == 0)
     {
-up:
+    up_wall:
       Serial.println("again");
-      delay(50);//for debouncing
+      delay(50); // for debouncing
       start = millis();
-    
-      //while(button.isPressed())
-      while (button.getStateRaw()==0) 
+
+      // while(button.isPressed())
+      while (button.getStateRaw() == 0)
       {
         Serial.println("stall");
-        now=millis();
+        now = millis();
         interval = now - start;
 
-        if(interval >= 3000) //if button is pressed continously for 3 sec, our reading is done
+        if (interval >= 3000) // if button is pressed continously for 3 sec, our reading is done
         {
           Serial.println("3 sec done, press any button to retract the arm");
           delay(10);
-          ans=read_str(); //to hold at that position, if we need to take continous reading along that length
-          goto out;
-          
+          ans = read_str(); // to hold at that position, if we need to take continous reading along that length
+          goto out_wall;
         }
       }
 
-      x++; //If button is not pressed, increase the arm angle/length
-      s1 = y+x;
-      s2 = 2*x;
-      s3 = 90+x;
+      x++; // If button is not pressed, increase the arm angle/length
+      s1 = 90 + y + x;
+      s2 = 2 * x;
+      s3 = 90 - y + x;
 
-      if(x==90) //maximul arm length condition
+      if (x == 90) // maximum arm length condition
       {
         Serial.println("Max length while button pressed, retract");
         ans = read_str();
         delay(10);
-        goto out;
+        goto out_wall;
       }
 
       S1.write(s1);
       S2.write(s2);
       S3.write(s3);
       delay(10);
-      goto up;
-      
+      goto up_wall;
     }
   }
-  out:
+out_wall:
+  delay(1);
+  retract_to_active_pos();
+}
 
-  //retract
+void roof_operation(int angle) // angle not less than 16
+{
+  y = angle;
+  so1 = S1.read();
+  so2 = S2.read();
+  so3 = S3.read();
+  for (so1, so3; so1 <= 90 + y, so3 <= 10; so1++, so3++)
+  {
+    S1.write(so1);
+    S3.write(so3);
+    delay(50);
+  }
+
+  for (x = 15; x <= 90; x++)
+  {
+    s1 = 90 + y + x;
+    s2 = 2 * x;
+    s3 = x - y;
+
+    S1.write(s1);
+    S2.write(s2);
+    S3.write(s3);
+    delay(50);
+
+    if (x == 90)
+    {
+      Serial.println("Max length, no surface, retract");
+      ans = read_str();
+      goto out_roof;
+    }
+
+    button.loop();
+    // if(button.isPressed())
+    if (button.getState() == 0)
+    {
+    up_roof:
+      Serial.println("again");
+      delay(50); // for debouncing
+      start = millis();
+
+      // while(button.isPressed())
+      while (button.getStateRaw() == 0)
+      {
+        Serial.println("stall");
+        now = millis();
+        interval = now - start;
+
+        if (interval >= 3000) // if button is pressed continously for 3 sec, our reading is done
+        {
+          Serial.println("3 sec done, press any button to retract the arm");
+          delay(10);
+          ans = read_str(); // to hold at that position, if we need to take continous reading along that length
+          goto out_roof;
+        }
+      }
+
+      x++; // If button is not pressed, increase the arm angle/length
+      s1 = 90 + y + x;
+      s2 = 2 * x;
+      s3 = x - y;
+
+      if (x == 90) // maximul arm length condition
+      {
+        Serial.println("Max length while button pressed, retract");
+        ans = read_str();
+        delay(10);
+        goto out_roof;
+      }
+
+      S1.write(s1);
+      S2.write(s2);
+      S3.write(s3);
+      delay(10);
+      goto up_roof;
+    }
+  }
+out_roof:
   Serial.println("out");
-  retract_to_active_pos(); //Arm will retract to it's action position
+  retract_to_active_pos();
+}
+void floor_operation(int angle)
+{
+  y = angle;
+  so1 = S1.read();
+  so2 = S2.read();
+  so3 = S3.read();
+  for (so1, so3; so1 <= 90 + y, so3 <= 180 - y; so1++, so3++)
+  {
+    S1.write(so1);
+    S3.write(so3);
+    delay(50);
+  }
 
-label1:
-  Serial.println("1. Go to initial position. /n 2. Go to Mode Select");
+  for (x = 5; x <= 90; x++)
+  {
+    s1 = 90 + y + x;
+    s2 = 2 * x;
+    s3 = 180 - y + x;
 
-  float m = read_val();
-  if(m==1)
-  {
-   //do nothig, go at the start of the void loop
+    S1.write(s1);
+    S2.write(s2);
+    S3.write(s3);
+    delay(50);
+
+    if (x == 90)
+    {
+      Serial.println("Max length, no surface, retract");
+      ans = read_str();
+      goto out_floor;
+    }
+
+    button.loop();
+    // if(button.isPressed())
+    if (button.getState() == 0)
+    {
+    up_floor:
+      Serial.println("again");
+      delay(50); // for debouncing
+      start = millis();
+
+      // while(button.isPressed())
+      while (button.getStateRaw() == 0)
+      {
+        Serial.println("stall");
+        now = millis();
+        interval = now - start;
+
+        if (interval >= 3000) // if button is pressed continously for 3 sec, our reading is done
+        {
+          Serial.println("3 sec done, press any button to retract the arm");
+          delay(10);
+          ans = read_str(); // to hold at that position, if we need to take continous reading along that length
+          goto out_floor;
+        }
+      }
+
+      x++; // If button is not pressed, increase the arm angle/length
+      s1 = 90 + y + x;
+      s2 = 2 * x;
+      s3 = 180 - y + x;
+
+      if (x == 90) // maximul arm length condition
+      {
+        Serial.println("Max length while button pressed, retract");
+        ans = read_str();
+        delay(10);
+        goto out_floor;
+      }
+
+      S1.write(s1);
+      S2.write(s2);
+      S3.write(s3);
+      delay(10);
+      goto up_floor;
+    }
   }
-  else if(m==2)
-  {
-    goto lab; //go to mood select line
-  }
-  else 
-  {
-    Serial.println("Enter Valid input");
-    goto label1; 
-  }
-  delay(100);
+out_floor:
+  Serial.println("out");
+  retract_to_active_pos();
 }
 
-void S1_positioning(int so)
+void corner_operation(int angle)
 {
-
-  if (so>y)
+  y = angle;
+  so1 = S1.read();
+  so2 = S2.read();
+  so3 = S3.read();
+  for (so1, so3; so1 <= 90 + y, so3 <= 90; so1++, so3++)
   {
-    for(so; so>=(y+10);so--)
-    {
-      S1.write(so);
-      delay(50);
-    }
-  }
-  else if(so<y)
-  {
-    for(so;so<=(y+10); so++)
-    {
-      S1.write(so);
-      delay(50);
-    }
-  }
-  else 
-  {
-    for(so; so<=10;so++)
-    {
-      S1.write(so);
-    }
+    S1.write(so1);
+    S3.write(so3);
+    delay(50);
   }
 
+  for (x = 5; x <= 90; x++)
+  {
+    s1 = 90 + y + x;
+    s2 = 2 * x;
+    s3 = 90 + x;
+
+    S1.write(s1);
+    S2.write(s2);
+    S3.write(s3);
+    delay(50);
+
+    if (x == 90)
+    {
+      Serial.println("Max length, no surface, retract");
+      ans = read_str();
+      goto out_corner;
+    }
+
+    button.loop();
+    // if(button.isPressed())
+    if (button.getState() == 0)
+    {
+    up_corner:
+      Serial.println("again");
+      delay(50); // for debouncing
+      start = millis();
+
+      // while(button.isPressed())
+      while (button.getStateRaw() == 0)
+      {
+        Serial.println("stall");
+        now = millis();
+        interval = now - start;
+
+        if (interval >= 3000) // if button is pressed continously for 3 sec, our reading is done
+        {
+          Serial.println("3 sec done, press any button to retract the arm");
+          delay(10);
+          ans = read_str(); // to hold at that position, if we need to take continous reading along that length
+          goto out_corner;
+        }
+      }
+
+      x++; // If button is not pressed, increase the arm angle/length
+      s1 = y + x;
+      s2 = 2 * x;
+      s3 = 90 + x;
+
+      if (x == 90) // maximul arm length condition
+      {
+        Serial.println("Max length while button pressed, retract");
+        ans = read_str();
+        delay(10);
+        goto out_corner;
+      }
+
+      S1.write(s1);
+      S2.write(s2);
+      S3.write(s3);
+      delay(10);
+      goto up_corner;
+    }
+  }
+out_corner:
+  Serial.println("out");
+  retract_to_active_pos();
 }
 
-void retract_to_active_pos()
+void retract_to_active_pos() // need to rectify
 {
-  for(x; x>=10; x--) 
+  for (x; x >= 5; x--)
   {
-    s1 = y+x;//y
-    s2 = 2*x;
-    s3 = 90+x;
+    s1 = y + x; // y
+    s2 = 2 * x;
+    s3 = 90 + x;
     S1.write(s1);
     S2.write(s2);
     S3.write(s3);
@@ -217,117 +434,10 @@ void retract_to_active_pos()
   }
 }
 
-void initial_position()
-{
-  so1=S1.read();
-  so2=S2.read();
-  so3=S3.read();
-
-  x=10;
-  
-  //For S1
-  if(so1>45)
-  {
-    for(so1;so1>=(45+x);so1++)
-    S1.write(so1);
-    delay(50);
-  }
-  else if(so1<45)
-  {
-    for(so1; so1<=(45+x); so1--)
-    {
-      S1.write(so1);
-      delay(50);
-    }
-  }
-  else 
-  {
-    for(so1; so1>=x; so1++)
-    {
-      S1.write(so1);
-      delay(50);
-    }
-  }
-
-  //For S2
-    if(so2>2*x)
-  {
-    for(so2;so2>=2*x;so2++)
-    S2.write(so2);
-    delay(50);
-  }
-  else if(so2<2*x)
-  {
-    for(so2; so2<=2*x; so2--)
-    {
-      S2.write(so2);
-      delay(50);
-    }
-  }
-  else 
-  {
-  //   for(so2; so2>=90; so2++)
-  //   {
-  //     S2.write(so2);
-  //     delay(50);
-  //   } 
-  }
-
-  //For S3
-  if(so3>x+90)
-  {
-    for(so3;so3>=(90+x);so3++)
-    S3.write(so3);
-    delay(50);
-  }
-  else if(so3<x+90)
-  {
-    for(so3; so3<=(90+x); so3--)
-    {
-      S3.write(so3);
-      delay(50);
-    }
-  }
-  else 
-  {
-    // for(so3; so3>=x; so3++)
-    // {
-    //   S3.write(so3);
-    //   delay(50);
-    // }
-  }
-}
-
-void rest_pos() //not used
-{
-  //for(x; x>=10; x--)
-  for(s1, s2, s3; s1>0,s2>=10,s3>=10; s1--, s2--, s3--) 
-  {
-    // s1 = 90+x; //y+x;
-    // s2 = 2*x;
-    // s3 = 90+x;
-    S1.write(s1);
-    S2.write(s2);
-    S3.write(s3);
-    delay(50);
-  }
-}
-
-void rest_to_active() //not used
-{
-  for(s1, s2, s3; s1<=y+10, s2<=(2*10), s3<=(90+10); s1++, s2++, s3++)
-  {
-    S1.write(s1);
-    S2.write(s2);
-    S3.write(s3);
-    delay(50);
-  }
-
-}
-
 String read_str()
-{ 
-  while(Serial.available()==0){
+{
+  while (Serial.available() == 0)
+  {
   }
   String ans = Serial.readString();
   ans.trim(); // to remove any spaces
@@ -335,20 +445,25 @@ String read_str()
 }
 
 float read_val()
- {
+{
   boolean inputReceived = false;
   float x = 0.0;
   // Loop until valid input is received
-  while (!inputReceived) {
-    if (Serial.available() > 0) {
+  while (!inputReceived)
+  {
+    if (Serial.available() > 0)
+    {
       // Read the input from Serial Monitor
       String input = Serial.readStringUntil('\n');
       x = input.toFloat(); // Convert input string to float
-      
+
       // Check if valid float input
-      if (!isnan(x)) {
+      if (!isnan(x))
+      {
         inputReceived = true; // Input is valid
-      } else {
+      }
+      else
+      {
         Serial.println("Invalid input. Please enter a valid float number, please re-enter:");
       }
     }
